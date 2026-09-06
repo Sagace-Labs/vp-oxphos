@@ -1,10 +1,9 @@
 """The OXPHOS dataset: obtain, standardise, verify.
 
-The shipped table is the *parsed* result — one row per compound, keyed on the
+The shipped table is the parsed result — one row per compound, keyed on the
 standardised InChIKey — and that is what the manifest hash covers. ``fetch``
 rebuilds it from PubChem and compares hashes, so its real job is drift
-detection: a differing hash means the upstream assay record changed, which is a
-scientific event worth a new version.
+detection.
 
 Two endpoints share the table. ``label`` is the membrane-potential call and
 defines which compounds the table holds. ``cytotox`` is the viability call from
@@ -60,7 +59,7 @@ _MIN_INTERVAL = 0.25  # PubChem asks for no more than five requests a second
 _CID_BATCH = 200  # the property endpoint carries its identifiers in the URL
 
 # The two calls that carry a label. A qHTS curve the assay could not call
-# either way is not a negative, so "Inconclusive" is dropped rather than zeroed.
+# either way is not a negative, so "Inconclusive" is dropped.
 _ACTIVE = "Active"
 _INACTIVE = "Inactive"
 
@@ -91,11 +90,7 @@ def example() -> pd.DataFrame:
 
 
 def labelled(table: pd.DataFrame, column: str) -> np.ndarray:
-    """Row positions where ``column`` carries a call.
-
-    An endpoint is fit and scored on its own compounds. Treating an uncalled
-    compound as a negative would invent a measurement the screen never made.
-    """
+    """Row positions where ``column`` carries a call."""
     return np.flatnonzero(table[column].notna().to_numpy())
 
 
@@ -105,7 +100,7 @@ def labelled(table: pd.DataFrame, column: str) -> np.ndarray:
 
 
 def _assay_records(aid: int) -> pd.DataFrame:
-    """The concise BioAssay table for one AID, as PubChem serves it."""
+    """The BioAssay table for one AID."""
     import requests
 
     url = f"{PUG_BASE}/assay/aid/{aid}/concise/CSV"
@@ -138,11 +133,7 @@ def _assay_records(aid: int) -> pd.DataFrame:
 
 
 def _smiles_for(cids: list[int]) -> pd.DataFrame:
-    """``(cid, smiles_raw)`` from the compound property endpoint, in batches.
-
-    Isomeric SMILES with the connectivity form as a fallback, since PubChem
-    renamed both properties and older mirrors still answer under the old names.
-    """
+    """``(cid, smiles_raw)`` from the compound property endpoint, in batches."""
     import requests
 
     session = requests.Session()
@@ -197,7 +188,6 @@ def _standardise(records: pd.DataFrame, structures: pd.DataFrame) -> pd.DataFram
 
     # Standardisation can emit a SMILES that RDKit will not read back, and a
     # featuriser turns one of those into an all-zero row rather than an error.
-    # Requiring the round trip keeps a silently empty compound out of the table.
     df = df[[Chem.MolFromSmiles(s) is not None for s in df["smiles"]]]
 
     df["active"] = (df["outcome"] == _ACTIVE).astype(int)
@@ -209,8 +199,7 @@ def _to_compounds(records: pd.DataFrame, structures: pd.DataFrame) -> pd.DataFra
 
     Salt and charge variants of the same compound carry separate identifiers
     upstream, so several records can land on one InChIKey. The label is the
-    majority call across them; a tie is dropped rather than broken arbitrarily,
-    because a compound the assay called both ways carries no clean label.
+    majority call across them; a tie is dropped.
     """
     df = _standardise(records, structures)
 
@@ -225,9 +214,7 @@ def _to_compounds(records: pd.DataFrame, structures: pd.DataFrame) -> pd.DataFra
                 "inchikey": inchikey,
                 "smiles": group["smiles"].iloc[0],
                 "label": int(active_frac > 0.5),
-                # Provenance. The qHTS potency is reported for a minority of
-                # records, which is why the label is the assay's own call and
-                # not a threshold on this column.
+                # Provenance.
                 "potency_um": float(np.median(reported)) if len(reported) else float("nan"),
                 "n_calls": len(group),
                 "active_frac": round(active_frac, 6),

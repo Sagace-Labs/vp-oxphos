@@ -4,14 +4,14 @@ _Generated from `manifest.toml` and `metrics.json`. Do not edit._
 
 Released 2026-09-03 · signature 2
 
-**Why this version.** Predicts the viability counter-screen alongside the membrane potential, so a mitochondrial liability can be told apart from general toxicity: a quarter of the compounds that collapse the potential also kill the cell. Drops the structural fingerprint for the descriptor panel alone, which scores the same on held-out compounds at a tenth of the width.
+**Why this version.** adds the viability counter-screen as a second endpoint and output; drops the structural fingerprint for the descriptor panel
 
 ## Outputs
 
 | column | dtype | range | meaning |
 |---|---|---|---|
 | `oxphos_disrupt` | float32 | 0.0–1.0 | P(collapses the mitochondrial membrane potential in the Tox21 qHTS reporter). The assay does not separate the mechanisms that reach it |
-| `oxphos_cytotox` | float32 | 0.0–1.0 | P(reduces viability in the counter-screen on the same library). Read it against oxphos_disrupt: a compound scoring high on both is toxic rather than specifically mitochondrial |
+| `oxphos_cytotox` | float32 | 0.0–1.0 | P(reduces viability in the counter-screen over the same library). A compound scoring high on both readouts lost membrane potential in a cell that was also dying |
 
 Missing values: NaN when RDKit cannot parse the input SMILES
 

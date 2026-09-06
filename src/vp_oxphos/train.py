@@ -1,15 +1,11 @@
 """Build a new released version.
 
-    python -m vp_oxphos.train --version v2 --reason "why this version exists"
+    python -m vp_oxphos.train --version v4 --reason "why this version exists"
 
 Writes ``versions/<version>/manifest.toml`` and ``weights.joblib``.
 
 The shipped weights are fit on the **whole** dataset, with a scaffold carve
-held out only for early stopping. The metrics in ``metrics.json`` come from a
-different set of fits: the protocol refits per seed on its own train fold.
-
-One model per declared output, each fit on the compounds its endpoint labels,
-stored under the output's name so the loader can match them to the signature.
+held out only for early stopping.
 """
 
 from __future__ import annotations
@@ -60,7 +56,7 @@ def build_version(
     seed: int = 0,
 ) -> Path:
     """Fit the deployment models and write the version directory."""
-    from vp_core import fingerprints, protocols
+    from vp_core import protocols
     from vp_core.splits import scaffold_train_val
 
     protocols.get(protocol)  # fail early on an unknown protocol
@@ -74,7 +70,7 @@ def build_version(
 
     table = oxphos_data.load()
     smiles = table["smiles"].tolist()
-    X = fingerprints.featurize(smiles, oxphos_model.FEATURES)
+    X = oxphos_model.featurize(smiles)
 
     fitted = {}
     for output in oxphos_contract.column_names():

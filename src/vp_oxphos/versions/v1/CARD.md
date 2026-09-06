@@ -4,7 +4,7 @@ _Generated from `manifest.toml` and `metrics.json`. Do not edit._
 
 Released 2026-09-01 · signature 1
 
-**Why this version.** Initial release. Binary XGBoost on Morgan, MACCS and RDKit descriptors over the Tox21 membrane-potential screen.
+**Why this version.** first release: binary XGBoost on Morgan, MACCS and RDKit descriptors over the Tox21 membrane-potential screen
 
 ## Outputs
 

@@ -6,7 +6,7 @@ authors:
   - name: "Sagace Labs"
 repository-code: "https://github.com/Sagace-Labs/vp-oxphos"
 license: Apache-2.0
-version: "2.0.0"
+version: "2.1.0"
 abstract: >-
   A predictor of mitochondrial membrane-potential disruption and of the
   cell-viability loss it is confounded with, from molecular structure.
@@ -27,6 +27,16 @@ references:
     journal: "Environmental Health Perspectives"
     year: 2015
     doi: "10.1289/ehp.1408642"
+  - type: article
+    title: >-
+      Using Machine Learning Methods and Structural Alerts for Prediction of
+      Mitochondrial Toxicity
+    authors:
+      - family-names: Hemmerich
+        given-names: Jennifer
+    journal: "Molecular Informatics"
+    year: 2020
+    doi: "10.1002/minf.202000005"
   - type: article
     title: "PubChem 2025 update"
     authors:

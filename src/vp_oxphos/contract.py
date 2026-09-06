@@ -1,7 +1,6 @@
 """The output contract.
 
-``train`` stamps this into each new version's manifest, so changing anything
-here is a deliberate act that produces a new record.
+``train`` stamps this into each new version's manifest.
 
 Bump ``SIGNATURE_VERSION`` only for a **breaking** change — a removed or
 renamed column, a changed dtype, or a changed meaning. Adding a new column is
@@ -41,9 +40,9 @@ OUTPUTS: list[dict[str, Any]] = [
         "dtype": "float32",
         "range": [0.0, 1.0],
         "semantics": (
-            "P(reduces viability in the counter-screen on the same library). Read "
-            "it against oxphos_disrupt: a compound scoring high on both is toxic "
-            "rather than specifically mitochondrial"
+            "P(reduces viability in the counter-screen over the same library). A "
+            "compound scoring high on both readouts lost membrane potential in a "
+            "cell that was also dying"
         ),
         "missing": "NaN when RDKit cannot parse the input SMILES",
     },

@@ -1,7 +1,6 @@
 """OXPHOS package tests.
 
-Everything here runs on the committed fixture and the shipped weights, so a
-fresh clone with no network and no licensed data can still verify the package.
+Everything here runs on the committed fixture and the shipped weights.
 """
 
 from __future__ import annotations
@@ -61,7 +60,7 @@ def test_a_version_can_be_pinned():
 
 
 def test_the_two_endpoints_are_distinct_predictions():
-    """A second column that merely copied the first would buy nothing."""
+    """The two endpoints predict different values."""
     frame = vp_oxphos.predict([ASPIRIN, CAFFEINE, "CCCCCCCCCCCCn1cc[n+](C)c1"])
     assert not np.allclose(
         frame["oxphos_disrupt"].to_numpy(), frame["oxphos_cytotox"].to_numpy()
@@ -88,7 +87,7 @@ def test_fixture_satisfies_the_dataset_contract():
 
 
 def test_an_uncalled_endpoint_is_absent_rather_than_negative():
-    """The distinction the second label column exists to preserve."""
+    """An uncalled compound is null, and is excluded from that endpoint."""
     fixture = data.example()
     assert fixture["cytotox"].isna().any()
     called = data.labelled(fixture, "cytotox")
@@ -102,12 +101,17 @@ def test_each_released_version_hashes_over_the_endpoints_it_declares():
     from vp_core import manifest as manifest_mod
 
     fixture = data.example()
-    hashes = set()
+    by_labels: dict[tuple[str, ...], set[str]] = {}
     for name in vp_oxphos.versions():
-        labels = manifest_mod.dataset_labels(vp_oxphos.get(name).manifest)
-        hashes.add(core_dataset.dataset_hash(fixture, labels=labels))
-    assert len(hashes) == len(vp_oxphos.versions()), (
-        "two versions declaring different endpoints hashed the same table alike"
+        labels = tuple(manifest_mod.dataset_labels(vp_oxphos.get(name).manifest))
+        digest = core_dataset.dataset_hash(fixture, labels=list(labels))
+        by_labels.setdefault(labels, set()).add(digest)
+
+    assert len(by_labels) > 1, "no version declares a different endpoint set"
+    for labels, digests in by_labels.items():
+        assert len(digests) == 1, f"{labels} hashed the same table two ways"
+    assert len({next(iter(d)) for d in by_labels.values()}) == len(by_labels), (
+        "two endpoint sets hashed the same table alike"
     )
 
 

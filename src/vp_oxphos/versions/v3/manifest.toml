@@ -1,8 +1,9 @@
 schema = 1
 pathway = "oxphos"
-version = "v2"
+version = "v3"
 released = "2026-09-03"
-reason = "adds the viability counter-screen as a second endpoint and output; drops the structural fingerprint for the descriptor panel"
+supersedes = "v2"
+reason = "adds published mitochondrial structural alerts to the descriptor panel"
 
 [signature]
 version = 2
@@ -38,10 +39,10 @@ fetch = "python -m vp_oxphos.data fetch --verify"
 
 [model]
 family = "xgboost-binary"
-features = "rdkit_desc"
+features = "rdkit_desc+alerts"
 fit = "one model per output, each on every compound its endpoint labels minus a 10% scaffold carve used for early stopping"
 weights = "weights.joblib"
-sha256 = "90ef550c0ae646744f68ee44c700f988fbf1b8d5692671e0b889da4200a67780"
+sha256 = "20ff8b1b1096b6320481b922d412916598d03e5a92dc656eccd120e6dcde7970"
 
 [protocol]
 id = "scaffold-shuffle-5seed@1"

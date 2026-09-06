@@ -1,8 +1,7 @@
 """Mitochondrial membrane-potential disruption from a SMILES string.
 
 Collapsing the inner-membrane proton gradient starves the hepatocyte of ATP and
-bursts reactive oxygen species. It is the shared endpoint of several distinct
-mitochondrial liabilities and a principal route to drug-induced liver injury.
+bursts reactive oxygen species.
 
     from vp_oxphos import predict
     predict(["CC(=O)Oc1ccccc1C(=O)O"])   # -> DataFrame[oxphos_disrupt, oxphos_cytotox]
@@ -20,7 +19,7 @@ from vp_core.registry import Version, VersionedPathway
 from vp_oxphos.target import CYTOTOX, TARGET, TARGETS, Endpoint, all_names
 from vp_oxphos.target import get as get_target
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 PATHWAY = "oxphos"
 VERSIONS_DIR = Path(__file__).resolve().parent / "versions"
@@ -29,16 +28,16 @@ VERSIONS_DIR = Path(__file__).resolve().parent / "versions"
 def _predict_values(model: Any, smiles: list[str], version: Version) -> np.ndarray:
     """Columns for ``version``, in the order its signature declares them.
 
-    Signature 1 shipped one model and one column; signature 2 ships one model
-    per endpoint under its output name, so the stored artifact decides how it is
-    read and both stay loadable.
+    Signature 1 stores one model; signature 2 stores one per endpoint under
+    its output name.
     """
     from rdkit import Chem, RDLogger
 
-    from vp_core import fingerprints, xgb
+    from vp_core import xgb
+    from vp_oxphos import model as oxphos_model
 
     RDLogger.DisableLog("rdApp.*")
-    X = fingerprints.featurize(smiles, str(version.features))
+    X = oxphos_model.featurize(smiles, str(version.features))
     if isinstance(model, dict):
         values = np.column_stack(
             [xgb.predict_proba(model[name], X) for name in version.output_names]

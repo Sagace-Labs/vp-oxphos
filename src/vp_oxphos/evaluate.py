@@ -1,29 +1,27 @@
 """Measure a version under an evaluation protocol.
 
-    python -m vp_oxphos.evaluate --version v2
+    python -m vp_oxphos.evaluate --version v4
 
 Writes ``versions/<version>/metrics.json`` and regenerates ``CARD.md``. The
 protocol named in the version's manifest supplies the split, the fold sizes,
-the seed set and the metric list.
+the seed set and the metric list. ``--protocol`` measures the same weights
+under another registered protocol; ``metrics.json`` keys every run by
+protocol id.
 
-Each seed refits on its own training fold. These are therefore *not* the
-shipped weights, which are fit on everything; see ``train``.
+Each seed refits on its own training fold.
 
 Every output is scored on the same folds, restricted to the compounds its own
 endpoint labels, so the fold sizes differ between outputs while the split does
 not. The first declared output carries the headline metrics.
 
-A seed that yields an empty fold raises rather than being skipped. Dropping a
-seed silently would change the estimator without changing the protocol id.
+A seed that yields an empty fold raises rather than being skipped.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from datetime import date
-from pathlib import Path
 
 import numpy as np
 
@@ -94,20 +92,25 @@ def _score_output(X, table, column, smiles, protocol) -> tuple[dict, list[dict]]
 
 
 def evaluate_version(
-    version: str, *, use_example: bool = False, write: bool = True
+    version: str,
+    *,
+    protocol_id: str | None = None,
+    use_example: bool = False,
+    write: bool = True,
 ) -> dict:
     """Run the version's protocol and return the metrics record."""
     import vp_oxphos
-    from vp_core import card, dataset, fingerprints, protocols
+    from vp_core import card, dataset, metrics_store, protocols
     from vp_core import manifest as manifest_mod
 
     resolved = vp_oxphos.get(version)
-    protocol = protocols.get(resolved.protocol_id)
+    protocol_id = protocol_id or resolved.protocol_id
+    protocol = protocols.get(protocol_id)
     labels = manifest_mod.dataset_labels(resolved.manifest)
 
     table = oxphos_data.example() if use_example else oxphos_data.load()
     smiles = table["smiles"].tolist()
-    X = fingerprints.featurize(smiles, oxphos_model.FEATURES)
+    X = oxphos_model.featurize(smiles)
 
     scored = {
         output: _score_output(X, table, OUTPUT_LABELS[output], smiles, protocol)[0]
@@ -118,7 +121,7 @@ def evaluate_version(
     record = {
         "pathway": "oxphos",
         "version": resolved.name,
-        "protocol_id": resolved.protocol_id,
+        "protocol_id": protocol_id,
         "dataset_sha256": dataset.dataset_hash(table, labels=labels),
         "dataset": "example fixture" if use_example else "full",
         "evaluated": date.today().isoformat(),
@@ -138,13 +141,12 @@ def evaluate_version(
                 "refusing to record fixture metrics as a released result — "
                 "--example is for smoke-checking the harness only"
             )
-        path = Path(resolved.directory) / "metrics.json"
-        path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+        path = metrics_store.write(resolved.directory, record)
         card.write_card(resolved.directory)
         auc = record["test"]["auc_roc"]
         print(
             f"wrote {path}\n"
-            f"  {resolved.protocol_id}: AUC {auc['mean']:.4f} +/- {auc['std']:.4f} "
+            f"  {protocol_id}: AUC {auc['mean']:.4f} +/- {auc['std']:.4f} "
             f"over {len(protocol.seeds)} seeds",
             file=sys.stderr,
         )
@@ -155,6 +157,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m vp_oxphos.evaluate")
     parser.add_argument("--version", default=None, help="default: the newest version")
     parser.add_argument(
+        "--protocol",
+        default=None,
+        help="default: the protocol the version's manifest declares",
+    )
+    parser.add_argument(
         "--example",
         action="store_true",
         help="run on the committed fixture without writing (smoke check only)",
@@ -164,7 +171,12 @@ def main(argv: list[str] | None = None) -> int:
     import vp_oxphos
 
     version = args.version or vp_oxphos.current_version()
-    record = evaluate_version(version, use_example=args.example, write=not args.example)
+    record = evaluate_version(
+        version,
+        protocol_id=args.protocol,
+        use_example=args.example,
+        write=not args.example,
+    )
     if args.example:
         auc = record["test"]["auc_roc"]["mean"]
         print(f"fixture smoke AUC {auc if np.isfinite(auc) else float('nan'):.4f}")

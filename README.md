@@ -16,18 +16,17 @@ production and floods with reactive oxygen species.
 
 Returns one row per input and one column per declared output. `oxphos_disrupt`
 is the probability of collapsing the membrane potential; `oxphos_cytotox` is the
-probability of reducing viability in the counter-screen run on the same library.
-Read them together: a compound scoring high on both is toxic rather than
-specifically mitochondrial, and the two claims are otherwise impossible to tell
-apart. Several distinct mechanisms reach the endpoint and the assay does not
-separate them. Unparseable SMILES come back as NaN. Pin a version with
-`predict(smiles, version="v2")`; list what is available with `versions()`.
+probability of reducing viability in the counter-screen over the same library. A
+compound scoring high on both lost membrane potential in a cell that was also
+dying. Several distinct mechanisms reach the endpoint and the assay does not
+separate them. Unparseable SMILES come back as NaN. Pin a version with `predict(smiles, version="v3")`; list what is
+available with `versions()`.
 
 ## Current version
 
-**v2**, signature 2, measured under protocol `scaffold-shuffle-5seed@1`. The
+**v3**, signature 2, measured under protocol `scaffold-shuffle-5seed@1`. The
 full record — metrics per output and per seed, dataset hash, environment — is in
-[`src/vp_oxphos/versions/v2/CARD.md`](src/vp_oxphos/versions/v2/CARD.md).
+[`src/vp_oxphos/versions/v3/CARD.md`](src/vp_oxphos/versions/v3/CARD.md).
 
 ## Data
 
@@ -42,14 +41,13 @@ for the expected layout.
 
 ## Retrain
 
-    python -m vp_oxphos.train --version v3 --reason "why this version exists"
-    python -m vp_oxphos.evaluate --version v3
+    python -m vp_oxphos.train --version v4 --reason "why this version exists"
+    python -m vp_oxphos.evaluate --version v4
 
 `train` fits one deployment model per output on the whole dataset and writes a
 new version directory; `evaluate` refits per seed under the protocol and records
 what those held-out models scored. Reproducibility is to the recorded dataset
-hash and environment, which can change — the source is a live endpoint and RDKit
-descriptor values move between releases.
+hash and environment, which can change.
 
 ## Licence
 

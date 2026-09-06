@@ -1,16 +1,6 @@
-"""The OXPHOS model: binary XGBoost on an RDKit descriptor panel.
+"""The OXPHOS model: binary XGBoost on descriptors and structural alerts.
 
-Hyperparameters and feature choice.
-
-Descriptors rather than a structural fingerprint, because this endpoint is
-reached by partitioning into a membrane and carrying a proton back out, which
-bulk properties state directly and a substructure key can only approximate. A
-2048-bit fingerprint alongside them changes the held-out score by less than the
-spread across seeds.
-
-Both endpoints use the same recipe. They differ only in which compounds carry a
-call, so each is fit on its own labelled rows.
-"""
+Hyperparameters, feature choice and featuriser."""
 
 from __future__ import annotations
 
@@ -19,10 +9,11 @@ from typing import Any
 import numpy as np
 
 from vp_core import fingerprints, xgb
+from vp_oxphos import alerts
 
-__all__ = ["FEATURES", "HYPERPARAMS", "fit", "predict"]
+__all__ = ["FEATURES", "HYPERPARAMS", "featurize", "fit", "predict"]
 
-FEATURES = "rdkit_desc"
+FEATURES = "rdkit_desc+alerts"
 
 HYPERPARAMS: dict[str, Any] = {
     "n_estimators": 2000,
@@ -36,6 +27,15 @@ HYPERPARAMS: dict[str, Any] = {
     "gamma": 0.1,
     "early_stopping_rounds": 40,
 }
+
+
+def featurize(smiles: list[str], kind: str = FEATURES) -> np.ndarray:
+    """Feature matrix for ``kind``. Names vp-core does not know are built here."""
+    if kind == "rdkit_desc+alerts":
+        return np.hstack(
+            [fingerprints.featurize(smiles, "rdkit_desc"), alerts.counts(smiles)]
+        ).astype(np.float32)
+    return fingerprints.featurize(smiles, kind)
 
 
 def fit(X_train, y_train, X_val, y_val, *, seed: int = 0) -> Any:
@@ -52,5 +52,4 @@ def fit(X_train, y_train, X_val, y_val, *, seed: int = 0) -> Any:
 
 def predict(model: Any, smiles: list[str]) -> np.ndarray:
     """Positive-class probability for arbitrary SMILES."""
-    X = fingerprints.featurize(smiles, FEATURES)
-    return xgb.predict_proba(model, X)
+    return xgb.predict_proba(model, featurize(smiles))

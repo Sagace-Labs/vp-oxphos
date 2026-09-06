@@ -1,15 +1,6 @@
 """The endpoints this pathway predicts.
 
-Frozen so the data sources are auditable. There is no single protein here:
-collapsing the mitochondrial membrane potential is the shared consequence of
-electron-transport-chain inhibition, protonophoric uncoupling, ATP-synthase
-inhibition and permeability-transition opening. Each assay is therefore the
-definition of its label, and is recorded verbatim.
-
-The counter-screen exists because the two readouts are confounded by
-construction: a compound that kills a cell collapses its membrane potential as
-a consequence. Reading the two together separates a mitochondrial liability
-from general toxicity, which one readout alone cannot do.
+Frozen so the data sources are auditable.
 
 Both assays were verified live against PubChem on 2026-09-01, and screen the
 same library:

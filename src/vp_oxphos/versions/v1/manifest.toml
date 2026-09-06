@@ -2,7 +2,7 @@ schema = 1
 pathway = "oxphos"
 version = "v1"
 released = "2026-09-01"
-reason = "Initial release. Binary XGBoost on Morgan, MACCS and RDKit descriptors over the Tox21 membrane-potential screen."
+reason = "first release: binary XGBoost on Morgan, MACCS and RDKit descriptors over the Tox21 membrane-potential screen"
 
 [signature]
 version = 1
