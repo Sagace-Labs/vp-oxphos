@@ -6,10 +6,10 @@ authors:
   - name: "Sagace Labs"
 repository-code: "https://github.com/Sagace-Labs/vp-oxphos"
 license: Apache-2.0
-version: "1.0.0"
+version: "2.0.0"
 abstract: >-
-  A predictor of mitochondrial membrane-potential disruption from molecular
-  structure.
+  A predictor of mitochondrial membrane-potential disruption and of the
+  cell-viability loss it is confounded with, from molecular structure.
 keywords:
   - cheminformatics
   - drug-induced liver injury

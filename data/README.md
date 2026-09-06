@@ -5,16 +5,19 @@
       example/
         oxphos_example.parquet     small stratified fixture, used by the tests
 
-`oxphos_tox21.parquet` holds one row per compound with the three contract
-columns — `inchikey`, `smiles` (standardised), `label` — plus `potency_um`,
-`n_calls` and `active_frac` as provenance. Only the contract columns are
+`oxphos_tox21.parquet` holds one row per compound with the two identity columns
+— `inchikey` and `smiles` (standardised) — and two label columns. `label` is the
+membrane-potential call and `cytotox` is the viability call. Alongside them are
+associated `potency_um`, `n_calls`, `active_frac`, `cytotox_n_calls` and
+`cytotox_active_frac` as provenance. Only the identity and label columns are
 hashed, so a provenance column may be added without moving the dataset hash.
 
 ## Origin and processing
 
 PubChem BioAssay AID 720635, the Tox21 qHTS screen for disruptors of the
-mitochondrial membrane potential, retrieved through the public PUG-REST
-concise assay endpoint. Rows the assay called Active or Inactive are kept and
+mitochondrial membrane potential, and AID 720634, the cell-viability
+counter-screen over the same library, retrieved through the public PUG-REST
+concise assay endpoint. Rows each assay called Active or Inactive are kept and
 rows it called Inconclusive are dropped. Compound identifiers are resolved to
 isomeric SMILES through the compound property endpoint; structures are
 standardised (normalise, largest fragment, neutralise); records are collapsed
@@ -23,10 +26,15 @@ to one row per InChIKey by majority call, and a tie is dropped.
 A standardised structure that RDKit will not read back is dropped too, in order
 to avoid featurization outputting all-zeros.
 
+The membrane-potential screen decides which compounds the table holds. The
+counter-screen calls 4579 of them; the rest carry a null in `cytotox`, which
+records that no call was made.
+
 `potency_um` is the median of the potencies reported across a compound's
-records and is NaN when none reported one, which is the usual case. `n_calls`
-is how many assay records collapsed into the row and `active_frac` is the share
-of them that were Active, so the majority vote stays auditable.
+membrane-potential records and is NaN when none reported one, which is the usual
+case. `n_calls` is how many assay records collapsed into the row and
+`active_frac` is the share of them that were Active, so the majority vote stays
+auditable. The two `cytotox_` columns say the same of the counter-screen.
 
 ## Rebuilding it
 

@@ -1,14 +1,14 @@
 [project]
 name = "vp-oxphos"
-version = "1.0.0"
-description = "Mitochondrial membrane-potential disruption predicted from a SMILES string — a molecular initiating event for drug-induced liver injury."
+version = "2.0.0"
+description = "Mitochondrial membrane-potential disruption and cell-viability loss predicted from a SMILES string — a molecular initiating event for drug-induced liver injury."
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Sagace Labs" }]
 keywords = ["cheminformatics", "toxicology", "DILI", "mitochondria", "OXPHOS", "QSAR"]
 dependencies = [
-    "vp-core>=1.1,<2",
+    "vp-core>=1.2,<2",
     "numpy>=1.26",
     "pandas>=2.2",
     "requests>=2.31",

@@ -7,6 +7,9 @@ Writes ``versions/<version>/manifest.toml`` and ``weights.joblib``.
 The shipped weights are fit on the **whole** dataset, with a scaffold carve
 held out only for early stopping. The metrics in ``metrics.json`` come from a
 different set of fits: the protocol refits per seed on its own train fold.
+
+One model per declared output, each fit on the compounds its endpoint labels,
+stored under the output's name so the loader can match them to the signature.
 """
 
 from __future__ import annotations
@@ -21,13 +24,19 @@ from pathlib import Path
 from vp_oxphos import contract as oxphos_contract
 from vp_oxphos import data as oxphos_data
 from vp_oxphos import model as oxphos_model
-from vp_oxphos.target import TARGET
+from vp_oxphos.target import CYTOTOX, TARGET
 
 __all__ = ["build_version", "main"]
 
 VERSIONS_DIR = Path(__file__).resolve().parent / "versions"
 
 DEFAULT_PROTOCOL = "scaffold-shuffle-5seed@1"
+
+#: Which label column supplies each declared output.
+OUTPUT_LABELS: dict[str, str] = {
+    "oxphos_disrupt": "label",
+    "oxphos_cytotox": "cytotox",
+}
 
 
 def _provenance() -> dict:
@@ -50,7 +59,7 @@ def build_version(
     supersedes: str | None = None,
     seed: int = 0,
 ) -> Path:
-    """Fit the deployment model and write the version directory."""
+    """Fit the deployment models and write the version directory."""
     from vp_core import fingerprints, protocols
     from vp_core.splits import scaffold_train_val
 
@@ -65,19 +74,31 @@ def build_version(
 
     table = oxphos_data.load()
     smiles = table["smiles"].tolist()
-    y = table["label"].to_numpy(dtype=int)
-
-    # Deployment fit: everything, with a small scaffold carve that stops
-    # boosting before it overfits.
-    train_idx, val_idx = scaffold_train_val(smiles, val_frac=0.10, seed=seed)
     X = fingerprints.featurize(smiles, oxphos_model.FEATURES)
-    fitted = oxphos_model.fit(
-        X[train_idx],
-        y[train_idx],
-        X[val_idx],
-        y[val_idx],
-        seed=seed,
-    )
+
+    fitted = {}
+    for output in oxphos_contract.column_names():
+        column = OUTPUT_LABELS[output]
+        rows = oxphos_data.labelled(table, column)
+        y = table[column].to_numpy()[rows].astype(int)
+        subset = [smiles[i] for i in rows]
+
+        # Deployment fit: everything this endpoint labels, with a small scaffold
+        # carve that stops boosting before it overfits.
+        train_idx, val_idx = scaffold_train_val(subset, val_frac=0.10, seed=seed)
+        fitted[output] = oxphos_model.fit(
+            X[rows][train_idx],
+            y[train_idx],
+            X[rows][val_idx],
+            y[val_idx],
+            seed=seed,
+        )
+        print(
+            f"  {output}: {len(rows)} labelled compounds, "
+            f"positive rate {y.mean():.3f}, "
+            f"best iteration {getattr(fitted[output], 'best_iteration', None)}",
+            file=sys.stderr,
+        )
 
     directory.mkdir(parents=True)
     try:
@@ -85,7 +106,6 @@ def build_version(
             directory,
             fitted,
             table,
-            y,
             version=version,
             reason=reason,
             protocol=protocol,
@@ -98,9 +118,8 @@ def build_version(
 
 def _write_version(
     directory: Path,
-    fitted,
+    fitted: dict,
     table,
-    y,
     *,
     version: str,
     reason: str,
@@ -115,6 +134,7 @@ def _write_version(
     weights_path = directory / "weights.joblib"
     joblib.dump(fitted, weights_path)
 
+    labels = list(oxphos_data.LABELS)
     record = {
         "schema": manifest.SCHEMA_VERSION,
         "pathway": "oxphos",
@@ -126,9 +146,10 @@ def _write_version(
         "dataset": {
             "name": "Tox21 mitochondrial membrane potential qHTS",
             "source": (
-                f"PubChem BioAssay AID {TARGET.pubchem_aid} "
-                f"({TARGET.assay_name}), rows called Active or Inactive, one row "
-                f"per compound labelled by majority call across its assay records"
+                f"PubChem BioAssay AID {TARGET.pubchem_aid} ({TARGET.assay_name}) "
+                f"and AID {CYTOTOX.pubchem_aid} ({CYTOTOX.assay_name}), rows called "
+                f"Active or Inactive, one row per compound labelled by majority "
+                f"call across its assay records"
             ),
             "url": (
                 "https://pubchem.ncbi.nlm.nih.gov/rest/pug/assay/aid/"
@@ -138,15 +159,19 @@ def _write_version(
             "licence": "public-domain",
             "redistributable": True,
             "path": "data/oxphos_tox21.parquet",
-            "sha256": dataset.dataset_hash(table),
+            "labels": labels,
+            "sha256": dataset.dataset_hash(table, labels=labels),
             "n_rows": len(table),
-            "base_rate": round(float(y.mean()), 6),
+            "base_rate": round(float(table["label"].mean()), 6),
             "fetch": "python -m vp_oxphos.data fetch --verify",
         },
         "model": {
             "family": "xgboost-binary",
             "features": oxphos_model.FEATURES,
-            "fit": "full dataset minus a 10% scaffold carve used for early stopping",
+            "fit": (
+                "one model per output, each on every compound its endpoint labels "
+                "minus a 10% scaffold carve used for early stopping"
+            ),
             "weights": "weights.joblib",
             "sha256": hashing.sha256_file(weights_path),
         },
@@ -165,8 +190,7 @@ def _write_version(
 
     print(
         f"wrote {directory}\n"
-        f"  {len(table)} compounds, positive rate {y.mean():.3f}\n"
-        f"  best iteration {getattr(fitted, 'best_iteration', None)}\n"
+        f"  {len(table)} compounds, positive rate {table['label'].mean():.3f}\n"
         f"  next: python -m vp_oxphos.evaluate --version {version}",
         file=sys.stderr,
     )

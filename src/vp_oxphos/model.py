@@ -1,11 +1,15 @@
-"""The OXPHOS model: binary XGBoost on a Morgan, MACCS and descriptor stack.
+"""The OXPHOS model: binary XGBoost on an RDKit descriptor panel.
 
 Hyperparameters and feature choice.
 
-The label is the assay's own Active/Inactive call, so the fit is binary rather
-than censored: the qHTS potency is reported for too few compounds to carry an
-interval. Balanced positive weighting comes from ``vp_core.xgb``, since a
-quarter of the library is active.
+Descriptors rather than a structural fingerprint, because this endpoint is
+reached by partitioning into a membrane and carrying a proton back out, which
+bulk properties state directly and a substructure key can only approximate. A
+2048-bit fingerprint alongside them changes the held-out score by less than the
+spread across seeds.
+
+Both endpoints use the same recipe. They differ only in which compounds carry a
+call, so each is fit on its own labelled rows.
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ from vp_core import fingerprints, xgb
 
 __all__ = ["FEATURES", "HYPERPARAMS", "fit", "predict"]
 
-FEATURES = "combo3"
+FEATURES = "rdkit_desc"
 
 HYPERPARAMS: dict[str, Any] = {
     "n_estimators": 2000,
@@ -35,7 +39,7 @@ HYPERPARAMS: dict[str, Any] = {
 
 
 def fit(X_train, y_train, X_val, y_val, *, seed: int = 0) -> Any:
-    """Fit one binary model. The validation fold stops boosting."""
+    """Fit one endpoint's binary model. The validation fold stops boosting."""
     return xgb.fit_binary(
         X_train,
         y_train,
@@ -47,6 +51,6 @@ def fit(X_train, y_train, X_val, y_val, *, seed: int = 0) -> Any:
 
 
 def predict(model: Any, smiles: list[str]) -> np.ndarray:
-    """P(membrane-potential disruptor) for arbitrary SMILES."""
+    """Positive-class probability for arbitrary SMILES."""
     X = fingerprints.featurize(smiles, FEATURES)
     return xgb.predict_proba(model, X)

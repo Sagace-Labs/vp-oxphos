@@ -6,10 +6,15 @@ rebuilds it from PubChem and compares hashes, so its real job is drift
 detection: a differing hash means the upstream assay record changed, which is a
 scientific event worth a new version.
 
-Pipeline: pull the concise BioAssay table for AID 720635, keep the rows the
-assay called Active or Inactive, resolve each compound identifier to a SMILES
-string through the compound property endpoint, standardise, then collapse to
-one row per compound by majority vote across its assay records.
+Two endpoints share the table. ``label`` is the membrane-potential call and
+defines which compounds the table holds. ``cytotox`` is the viability call from
+the counter-screen run on the same library, and is null for a compound that
+screen did not call — an absence of evidence, not a negative.
+
+Pipeline, per endpoint: pull the concise BioAssay table, keep the rows the assay
+called Active or Inactive, resolve each compound identifier to a SMILES string
+through the compound property endpoint, standardise, then collapse to one row
+per compound by majority vote across its assay records.
 
 Run as a command:
 
@@ -28,11 +33,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from vp_oxphos.target import TARGET
+from vp_oxphos.target import CYTOTOX, TARGET
 
 __all__ = [
     "DATA_DIR",
     "EXAMPLE_PATH",
+    "LABELS",
     "TABLE_PATH",
     "build_example",
     "example",
@@ -45,6 +51,9 @@ _PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = _PACKAGE_ROOT / "data"
 TABLE_PATH = DATA_DIR / "oxphos_tox21.parquet"
 EXAMPLE_PATH = DATA_DIR / "example" / "oxphos_example.parquet"
+
+#: The label columns the table carries, primary endpoint first.
+LABELS: tuple[str, ...] = ("label", "cytotox")
 
 PUG_BASE = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
 _MIN_INTERVAL = 0.25  # PubChem asks for no more than five requests a second
@@ -69,7 +78,7 @@ def load() -> pd.DataFrame:
 
     if not TABLE_PATH.exists():
         raise FileNotFoundError(_missing(TABLE_PATH))
-    return dataset.read_table(TABLE_PATH)
+    return dataset.read_table(TABLE_PATH, labels=LABELS)
 
 
 def example() -> pd.DataFrame:
@@ -78,7 +87,16 @@ def example() -> pd.DataFrame:
 
     if not EXAMPLE_PATH.exists():
         raise FileNotFoundError(_missing(EXAMPLE_PATH))
-    return dataset.read_table(EXAMPLE_PATH)
+    return dataset.read_table(EXAMPLE_PATH, labels=LABELS)
+
+
+def labelled(table: pd.DataFrame, column: str) -> np.ndarray:
+    """Row positions where ``column`` carries a call.
+
+    An endpoint is fit and scored on its own compounds. Treating an uncalled
+    compound as a negative would invent a measurement the screen never made.
+    """
+    return np.flatnonzero(table[column].notna().to_numpy())
 
 
 # ---------------------------------------------------------------------------
@@ -86,11 +104,11 @@ def example() -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def _assay_records() -> pd.DataFrame:
-    """The concise BioAssay table for the endpoint's AID, as PubChem serves it."""
+def _assay_records(aid: int) -> pd.DataFrame:
+    """The concise BioAssay table for one AID, as PubChem serves it."""
     import requests
 
-    url = f"{PUG_BASE}/assay/aid/{TARGET.pubchem_aid}/concise/CSV"
+    url = f"{PUG_BASE}/assay/aid/{aid}/concise/CSV"
     response = requests.get(url, headers={"Accept": "text/csv"}, timeout=300)
     response.raise_for_status()
     raw = pd.read_csv(io.BytesIO(response.content), dtype=str, low_memory=False)
@@ -98,8 +116,8 @@ def _assay_records() -> pd.DataFrame:
     for column in ("CID", "Activity Outcome"):
         if column not in raw.columns:
             raise RuntimeError(
-                f"AID {TARGET.pubchem_aid} returned no {column!r} column; the concise "
-                f"format changed upstream. Columns: {raw.columns.tolist()}"
+                f"AID {aid} returned no {column!r} column; the concise format "
+                f"changed upstream. Columns: {raw.columns.tolist()}"
             )
 
     df = pd.DataFrame(
@@ -112,7 +130,7 @@ def _assay_records() -> pd.DataFrame:
     df = df[df["outcome"].isin([_ACTIVE, _INACTIVE])].dropna(subset=["cid"])
     df["cid"] = df["cid"].astype(int)
     print(
-        f"  {len(df)} labelled records "
+        f"  AID {aid}: {len(df)} labelled records "
         f"({int((df['outcome'] == _ACTIVE).sum())} active)",
         file=sys.stderr,
     )
@@ -164,14 +182,7 @@ def _smiles_for(cids: list[int]) -> pd.DataFrame:
     return out.drop_duplicates(subset=["cid"]).reset_index(drop=True)
 
 
-def _to_compounds(records: pd.DataFrame, structures: pd.DataFrame) -> pd.DataFrame:
-    """Collapse assay records to one row per standardised compound.
-
-    Salt and charge variants of the same compound carry separate identifiers
-    upstream, so several records can land on one InChIKey. The label is the
-    majority call across them; a tie is dropped rather than broken arbitrarily,
-    because a compound the assay called both ways carries no clean label.
-    """
+def _standardise(records: pd.DataFrame, structures: pd.DataFrame) -> pd.DataFrame:
     from rdkit import Chem, RDLogger
 
     from vp_core.standardise import standardise_many
@@ -190,6 +201,18 @@ def _to_compounds(records: pd.DataFrame, structures: pd.DataFrame) -> pd.DataFra
     df = df[[Chem.MolFromSmiles(s) is not None for s in df["smiles"]]]
 
     df["active"] = (df["outcome"] == _ACTIVE).astype(int)
+    return df
+
+
+def _to_compounds(records: pd.DataFrame, structures: pd.DataFrame) -> pd.DataFrame:
+    """Collapse membrane-potential records to one row per standardised compound.
+
+    Salt and charge variants of the same compound carry separate identifiers
+    upstream, so several records can land on one InChIKey. The label is the
+    majority call across them; a tie is dropped rather than broken arbitrarily,
+    because a compound the assay called both ways carries no clean label.
+    """
+    df = _standardise(records, structures)
 
     rows: list[dict] = []
     for inchikey, group in df.groupby("inchikey"):
@@ -213,23 +236,57 @@ def _to_compounds(records: pd.DataFrame, structures: pd.DataFrame) -> pd.DataFra
     return pd.DataFrame(rows).sort_values("inchikey").reset_index(drop=True)
 
 
+def _counter_screen(records: pd.DataFrame, structures: pd.DataFrame) -> pd.DataFrame:
+    """Collapse viability records the same way, keyed for a join on InChIKey."""
+    df = _standardise(records, structures)
+
+    rows: list[dict] = []
+    for inchikey, group in df.groupby("inchikey"):
+        active_frac = float(group["active"].mean())
+        if active_frac == 0.5:
+            continue
+        rows.append(
+            {
+                "inchikey": inchikey,
+                "cytotox": int(active_frac > 0.5),
+                "cytotox_n_calls": len(group),
+                "cytotox_active_frac": round(active_frac, 6),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def fetch(*, write: bool = True) -> pd.DataFrame:
     """Rebuild the dataset from PubChem. Returns the standardised table."""
     from vp_core import dataset
 
     print(f"fetching AID {TARGET.pubchem_aid} from PubChem", file=sys.stderr)
-    records = _assay_records()
-    structures = _smiles_for(records["cid"].tolist())
-    table = _to_compounds(records, structures)
+    primary = _assay_records(TARGET.pubchem_aid)
+    print(f"fetching AID {CYTOTOX.pubchem_aid} from PubChem", file=sys.stderr)
+    counter = _assay_records(CYTOTOX.pubchem_aid)
 
-    problems = dataset.validate_table(table)
+    cids = sorted(set(primary["cid"]) | set(counter["cid"]))
+    structures = _smiles_for(cids)
+
+    table = _to_compounds(primary, structures)
+    # A left join: the membrane-potential endpoint decides which compounds the
+    # table holds, and the counter-screen fills in where it also has a call.
+    table = table.merge(_counter_screen(counter, structures), on="inchikey", how="left")
+    table["cytotox"] = table["cytotox"].astype("Int64")
+
+    problems = dataset.validate_table(table, labels=LABELS)
     if problems:
         raise ValueError(f"rebuilt table is invalid: {'; '.join(problems)}")
     if write:
-        dataset.write_table(table, TABLE_PATH)
+        dataset.write_table(table, TABLE_PATH, labels=LABELS)
+
+    called = table["cytotox"].notna()
     print(
         f"{len(table)} compounds, {int(table['label'].sum())} positive "
-        f"({table['label'].mean():.1%}), sha256 {dataset.dataset_hash(table)}",
+        f"({table['label'].mean():.1%})\n"
+        f"  counter-screen calls {int(called.sum())} of them, "
+        f"{int(table.loc[called, 'cytotox'].sum())} positive\n"
+        f"  sha256 {dataset.dataset_hash(table, labels=LABELS)}",
         file=sys.stderr,
     )
     return table
@@ -239,12 +296,15 @@ def verify(version: str | None = None) -> dict:
     """Compare the on-disk table against the hash a released version recorded."""
     import vp_oxphos
     from vp_core import dataset
+    from vp_core import manifest as manifest_mod
 
     resolved = vp_oxphos.get(version)
+    labels = manifest_mod.dataset_labels(resolved.manifest)
     declared = resolved.manifest.get("dataset", {}).get("sha256")
-    actual = dataset.dataset_hash(load())
+    actual = dataset.dataset_hash(load(), labels=labels)
     return {
         "version": resolved.name,
+        "labels": labels,
         "declared": declared,
         "actual": actual,
         "match": declared == actual,
@@ -255,8 +315,8 @@ def build_example(n: int = 200, seed: int = 0) -> pd.DataFrame:
     """Regenerate the committed fixture from the full table."""
     from vp_core import dataset
 
-    sample = dataset.stratified_example(load(), n=n, seed=seed)
-    dataset.write_table(sample, EXAMPLE_PATH)
+    sample = dataset.stratified_example(load(), n=n, seed=seed, labels=LABELS)
+    dataset.write_table(sample, EXAMPLE_PATH, labels=LABELS)
     return sample
 
 

@@ -5,7 +5,7 @@ bursts reactive oxygen species. It is the shared endpoint of several distinct
 mitochondrial liabilities and a principal route to drug-induced liver injury.
 
     from vp_oxphos import predict
-    predict(["CC(=O)Oc1ccccc1C(=O)O"])      # -> DataFrame[oxphos_disrupt]
+    predict(["CC(=O)Oc1ccccc1C(=O)O"])   # -> DataFrame[oxphos_disrupt, oxphos_cytotox]
 """
 
 from __future__ import annotations
@@ -13,22 +13,50 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from vp_core.registry import Version, VersionedPathway
-from vp_oxphos.target import TARGET, TARGETS, Endpoint, all_names
+from vp_oxphos.target import CYTOTOX, TARGET, TARGETS, Endpoint, all_names
 from vp_oxphos.target import get as get_target
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 PATHWAY = "oxphos"
 VERSIONS_DIR = Path(__file__).resolve().parent / "versions"
 
-# One probability column from an XGBoost model on a vp-core fingerprint is
-# exactly what the registry's default predictor produces, so no override.
-_pathway = VersionedPathway(PATHWAY, VERSIONS_DIR)
+
+def _predict_values(model: Any, smiles: list[str], version: Version) -> np.ndarray:
+    """Columns for ``version``, in the order its signature declares them.
+
+    Signature 1 shipped one model and one column; signature 2 ships one model
+    per endpoint under its output name, so the stored artifact decides how it is
+    read and both stay loadable.
+    """
+    from rdkit import Chem, RDLogger
+
+    from vp_core import fingerprints, xgb
+
+    RDLogger.DisableLog("rdApp.*")
+    X = fingerprints.featurize(smiles, str(version.features))
+    if isinstance(model, dict):
+        values = np.column_stack(
+            [xgb.predict_proba(model[name], X) for name in version.output_names]
+        )
+    else:
+        values = xgb.predict_proba(model, X).reshape(-1, 1)
+
+    # An unparseable input is a declared NaN, not an error.
+    unparseable = [Chem.MolFromSmiles(s) is None for s in smiles]
+    values = values.astype(np.float32)
+    values[np.asarray(unparseable)] = np.nan
+    return values
+
+
+_pathway = VersionedPathway(PATHWAY, VERSIONS_DIR, predict_fn=_predict_values)
 
 __all__ = [
+    "CYTOTOX",
     "PATHWAY",
     "TARGET",
     "TARGETS",
@@ -47,7 +75,7 @@ __all__ = [
 
 
 def predict(smiles: list[str], *, version: str | None = None) -> pd.DataFrame:
-    """P(membrane-potential disruptor) for each SMILES, using ``version``."""
+    """Score each SMILES with ``version`` (default: newest)."""
     return _pathway.predict(smiles, version=version)
 
 

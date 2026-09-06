@@ -1,0 +1,54 @@
+schema = 1
+pathway = "oxphos"
+version = "v2"
+released = "2026-09-03"
+reason = "Predicts the viability counter-screen alongside the membrane potential, so a mitochondrial liability can be told apart from general toxicity: a quarter of the compounds that collapse the potential also kill the cell. Drops the structural fingerprint for the descriptor panel alone, which scores the same on held-out compounds at a tenth of the width."
+
+[signature]
+version = 2
+inputs = ["smiles"]
+
+[[signature.outputs]]
+name = "oxphos_disrupt"
+dtype = "float32"
+range = [0.0, 1.0]
+semantics = "P(collapses the mitochondrial membrane potential in the Tox21 qHTS reporter). The assay does not separate the mechanisms that reach it"
+missing = "NaN when RDKit cannot parse the input SMILES"
+
+[[signature.outputs]]
+name = "oxphos_cytotox"
+dtype = "float32"
+range = [0.0, 1.0]
+semantics = "P(reduces viability in the counter-screen on the same library). Read it against oxphos_disrupt: a compound scoring high on both is toxic rather than specifically mitochondrial"
+missing = "NaN when RDKit cannot parse the input SMILES"
+
+[dataset]
+name = "Tox21 mitochondrial membrane potential qHTS"
+source = "PubChem BioAssay AID 720635 (qHTS assay for small molecule disruptors of the mitochondrial membrane potential) and AID 720634 (qHTS assay for small molecule disruptors of the mitochondrial membrane potential - cell viability), rows called Active or Inactive, one row per compound labelled by majority call across its assay records"
+url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/assay/aid/720635/concise/CSV"
+retrieved = "2026-09-01"
+licence = "public-domain"
+redistributable = true
+path = "data/oxphos_tox21.parquet"
+labels = ["label", "cytotox"]
+sha256 = "95f4fa7fb544025d074fea1d8a5286c45b9b5b210003f3ff3a6948869bd62e4e"
+n_rows = 4925
+base_rate = 0.262741
+fetch = "python -m vp_oxphos.data fetch --verify"
+
+[model]
+family = "xgboost-binary"
+features = "rdkit_desc"
+fit = "one model per output, each on every compound its endpoint labels minus a 10% scaffold carve used for early stopping"
+weights = "weights.joblib"
+sha256 = "90ef550c0ae646744f68ee44c700f988fbf1b8d5692671e0b889da4200a67780"
+
+[protocol]
+id = "scaffold-shuffle-5seed@1"
+provider = "vp-core"
+core_version = "1.2.0"
+
+[provenance]
+python = "3.11.11"
+rdkit = "2026.03.5"
+xgboost = "3.2.0"
