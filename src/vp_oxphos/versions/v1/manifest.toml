@@ -1,0 +1,46 @@
+schema = 1
+pathway = "oxphos"
+version = "v1"
+released = "2026-09-01"
+reason = "Initial release. Binary XGBoost on Morgan, MACCS and RDKit descriptors over the Tox21 membrane-potential screen, giving the panel its mitochondrial axis alongside the cholestatic one."
+
+[signature]
+version = 1
+inputs = ["smiles"]
+
+[[signature.outputs]]
+name = "oxphos_disrupt"
+dtype = "float32"
+range = [0.0, 1.0]
+semantics = "P(collapses the mitochondrial membrane potential in the Tox21 qHTS reporter). The assay does not separate the mechanisms that reach it"
+missing = "NaN when RDKit cannot parse the input SMILES"
+
+[dataset]
+name = "Tox21 mitochondrial membrane potential qHTS"
+source = "PubChem BioAssay AID 720635 (qHTS assay for small molecule disruptors of the mitochondrial membrane potential), rows called Active or Inactive, one row per compound labelled by majority call across its assay records"
+url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/assay/aid/720635/concise/CSV"
+retrieved = "2026-09-01"
+licence = "public-domain"
+redistributable = true
+path = "data/oxphos_tox21.parquet"
+sha256 = "f86374d71b3db4360aa9e5be27caf269b1b5d1ab20528004d137b8e887b3f26c"
+n_rows = 4925
+base_rate = 0.262741
+fetch = "python -m vp_oxphos.data fetch --verify"
+
+[model]
+family = "xgboost-binary"
+features = "combo3"
+fit = "full dataset minus a 10% scaffold carve used for early stopping"
+weights = "weights.joblib"
+sha256 = "1a0581ef95308c72a5320a0fcdd278cc2163cf434cf373fb553489118c3e8dbe"
+
+[protocol]
+id = "scaffold-shuffle-5seed@1"
+provider = "vp-core"
+core_version = "1.1.0"
+
+[provenance]
+python = "3.11.11"
+rdkit = "2026.03.5"
+xgboost = "3.2.0"

@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+title: "vp-oxphos: mitochondrial membrane-potential disruption prediction"
+message: "If you use this package, please cite it and the underlying Tox21 data."
+type: software
+authors:
+  - name: "Sagace Labs"
+repository-code: "https://github.com/Sagace-Labs/vp-oxphos"
+license: Apache-2.0
+version: "1.0.0"
+abstract: >-
+  A predictor of mitochondrial membrane-potential disruption from molecular
+  structure.
+keywords:
+  - cheminformatics
+  - drug-induced liver injury
+  - mitochondrial toxicity
+  - OXPHOS
+  - Tox21
+references:
+  - type: article
+    title: >-
+      Identification of small molecules that disrupt mitochondrial membrane
+      potential in the Tox21 10K compound library
+    authors:
+      - family-names: Attene-Ramos
+        given-names: Matias S.
+    journal: "Environmental Health Perspectives"
+    year: 2015
+    doi: "10.1289/ehp.1408642"
+  - type: article
+    title: "PubChem 2025 update"
+    authors:
+      - family-names: Kim
+        given-names: Sunghwan
+    journal: "Nucleic Acids Research"
+    year: 2025
+    doi: "10.1093/nar/gkae1059"

@@ -1,0 +1,29 @@
+[project]
+name = "vp-oxphos"
+version = "1.0.0"
+description = "Mitochondrial membrane-potential disruption predicted from a SMILES string — a molecular initiating event for drug-induced liver injury."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Sagace Labs" }]
+keywords = ["cheminformatics", "toxicology", "DILI", "mitochondria", "OXPHOS", "QSAR"]
+dependencies = [
+    "vp-core>=1.1,<2",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "requests>=2.31",
+]
+
+[project.urls]
+Source = "https://github.com/Sagace-Labs/vp-oxphos"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Released versions live inside the package directory, so the manifests and
+# weights are picked up here and travel with the wheel. The dataset is not
+# included: it is needed only to retrain.
+[tool.hatch.build.targets.wheel]
+packages = ["src/vp_oxphos"]
+artifacts = ["src/vp_oxphos/versions/**"]
